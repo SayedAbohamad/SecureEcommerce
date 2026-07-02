@@ -1,0 +1,25 @@
+{
+  "short_name": "Markety",
+  "name": "Markety — Tech, Gaming PCs and Computer Accessories",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "any",
+      "type": "image/png"
+    },
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#5B3DC8",
+  "background_color": "#ffffff"
+}

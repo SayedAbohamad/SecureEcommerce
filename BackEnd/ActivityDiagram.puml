@@ -1,0 +1,52 @@
+@startuml ActivityDiagram
+!theme plain
+skinparam activity {
+  BackgroundColor lightblue
+  BorderColor black
+}
+
+title Checkout Process Activity Diagram
+
+start
+
+:User browses products;
+:User adds items to cart;
+:User views cart;
+
+if (Cart is empty?) then (yes)
+  :Display error message;
+  stop
+else (no)
+endif
+
+:User clicks Checkout;
+:System retrieves user cart;
+:Calculate total amount;
+
+partition "Order Creation" {
+  :Create new Order;
+  :Set OrderDate = DateTime.Now;
+  :Set Status = Processing;
+  :Set PaymentMethod from user input;
+  :Set TotalAmount = calculated total;
+  
+  repeat
+    :Get next CartItem;
+    :Create OrderItem;
+    :Set ProductId, Quantity, Price;
+    :Add OrderItem to Order;
+  repeat while (More CartItems?) is (yes)
+  ->no;
+  
+  :Save Order to database;
+}
+
+partition "Cart Cleanup" {
+  :Remove all CartItems from Cart;
+  :Save changes;
+}
+
+:Return success message;
+stop
+
+@enduml

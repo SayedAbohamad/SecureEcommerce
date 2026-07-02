@@ -1,0 +1,48 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+**/appsettings.*.local.json
+**/appsettings.Secrets.json
+**/appsettings.*.secrets.json
+**/secrets.json
+
+# .NET
+**/bin/
+**/obj/
+**/bin_stripe_check/
+**/out/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.dll
+*.pdb
+*.log
+project.lock.json
+project.fragment.lock.json
+
+# Published output (often contains connection strings)
+**/publish/
+**/PubTmp/
+
+# Node / React
+**/node_modules/
+**/build/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local tool / OS
+.claude/
+*.rar
+**/*.rar
+
+# IDE
+.vs/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
