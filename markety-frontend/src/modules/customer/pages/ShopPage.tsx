@@ -6,24 +6,23 @@ import { LoadingOverlay } from '../../../components/common/LoadingOverlay';
 import { useAuth } from '../../../hooks/useAuth';
 import { SimpleProductCard } from '../components/SimpleProductCard';
 
+const normalizeSearchText = (value: string) => value.trim().toLowerCase();
+const searchTokens = (value: string) => normalizeSearchText(value).split(/\s+/).filter(Boolean);
+
 export const ShopPage = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Get search query from URL params
   useEffect(() => {
     const searchFromUrl = searchParams.get('search');
-    if (searchFromUrl) {
-      setSearchTerm(searchFromUrl);
-    }
+    setSearchTerm(searchFromUrl ?? '');
+
     const categoryFromUrl = searchParams.get('category');
-    if (categoryFromUrl) {
-      setActiveFilter(categoryFromUrl);
-    }
+    setActiveFilter(categoryFromUrl ?? 'all');
   }, [searchParams]);
 
   useEffect(() => {
@@ -71,23 +70,33 @@ export const ShopPage = () => {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    const query = searchTerm.trim().toLowerCase();
-    const filterValue = activeFilter.toLowerCase();
+    const tokens = searchTokens(searchTerm);
+    const filterValue = normalizeSearchText(activeFilter);
 
     return products.filter((product) => {
-      const category = product.categoryName?.toLowerCase() ?? '';
-      const categoryId = product.categoryId?.toString().toLowerCase() ?? '';
-      const name = product.name.toLowerCase();
+      const category = normalizeSearchText(product.categoryName ?? '');
+      const categoryId = normalizeSearchText(product.categoryId?.toString() ?? '');
+      const name = normalizeSearchText(product.name);
+      const haystack = normalizeSearchText(
+        `${product.name} ${product.description ?? ''} ${product.categoryName ?? ''}`,
+      );
       const matchesFilter =
         filterValue === 'all' || category.includes(filterValue) || categoryId === filterValue || name.includes(filterValue);
-      const matchesSearch =
-        query.length === 0 ||
-        name.includes(query) ||
-        product.description?.toLowerCase().includes(query) ||
-        category.includes(query);
+      const matchesSearch = tokens.length === 0 || tokens.every((token) => haystack.includes(token));
       return matchesFilter && matchesSearch;
     });
   }, [products, activeFilter, searchTerm]);
+
+  const handleFilterChange = (value: string) => {
+    setActiveFilter(value);
+    const next = new URLSearchParams(searchParams);
+    if (value === 'all') {
+      next.delete('category');
+    } else {
+      next.set('category', value);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const determineBadge = (index: number, product: any) => {
     if (product.oldPrice && product.oldPrice > product.price) return 'Sale';
@@ -140,7 +149,7 @@ export const ShopPage = () => {
             <button
               key={filter.value}
               className={`collection-filter__button ${activeFilter === filter.value ? 'active' : ''}`}
-              onClick={() => setActiveFilter(filter.value)}
+              onClick={() => handleFilterChange(filter.value)}
               type="button"
             >
               {filter.label}
@@ -154,7 +163,17 @@ export const ShopPage = () => {
             className="form-control"
             placeholder="Search laptops, GPUs, RAM, monitors, brands, and more..."
             value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSearchTerm(value);
+              const next = new URLSearchParams(searchParams);
+              if (value.trim()) {
+                next.set('search', value);
+              } else {
+                next.delete('search');
+              }
+              setSearchParams(next, { replace: true });
+            }}
           />
         </div>
 

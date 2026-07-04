@@ -1,15 +1,18 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { authApi } from '../../api/auth';
-import { executeRecaptcha } from '../../utils/recaptcha';
-import { AuthScene } from '../../components/visuals/AuthScene';
+import { useTranslation } from 'react-i18next';
 import Swal from 'sweetalert2';
 import { AxiosError } from 'axios';
+import { authApi } from '../../api/auth';
+import { executeRecaptcha } from '../../utils/recaptcha';
+import './LoginPage.css';
 
 export const ForgotPasswordPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -26,22 +29,15 @@ export const ForgotPasswordPage = () => {
     }
 
     setIsSubmitting(true);
+    setStatus(null);
     try {
       const recaptchaToken = await executeRecaptcha('forgot_password');
       await authApi.forgotPassword(email.trim(), recaptchaToken);
-
-      await Swal.fire({
-        title: 'Check Your Email',
-        text: 'If an account with that email exists, we\'ve sent you a password reset link.',
-        icon: 'success',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#5B3DC8',
-      });
-
+      setStatus({ type: 'success', message: t('auth.forgotSuccess') });
       setEmail('');
     } catch (err) {
       console.error(err);
-      let errorMessage = 'Unable to process your request. Please try again.';
+      let errorMessage = t('auth.forgotError');
 
       if (err instanceof AxiosError) {
         if (!err.response) {
@@ -60,86 +56,100 @@ export const ForgotPasswordPage = () => {
         errorMessage = err.message;
       }
 
-      await Swal.fire({
-        title: 'Request Failed',
-        text: errorMessage,
-        icon: 'error',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#5B3DC8',
-      });
+      setStatus({ type: 'error', message: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const heroImage = `${process.env.PUBLIC_URL}/template/img/product-banner-3.jpg`;
-
   return (
-    <div className="login-page d-flex min-vh-100">
-      <div className="login-hero position-relative text-white">
-        <div className="auth-scene">
-          <AuthScene accentColor="#7C5FE0" lightColor="#FF6B35" rotation={[0.4, -0.3, 0.1]} />
-        </div>
-        <div className="login-hero__overlay" />
-        <img src={heroImage} alt="Markety shopping" className="login-hero__image" />
-        <div className="login-hero__content">
-          <span className="badge rounded-pill px-3 py-2 text-uppercase bg-white text-primary mb-3 shadow-sm">
-            <i className="fas fa-key me-2" />
-            Password Reset
+    <main className="mk-login-shell mk-forgot-shell">
+      <div className="mk-login-grid" aria-hidden="true" />
+      <div className="mk-login-orb mk-login-orb--violet" aria-hidden="true" />
+      <div className="mk-login-orb mk-login-orb--blue" aria-hidden="true" />
+
+      <section className="mk-login-hero" aria-label="Password reset">
+        <header className="mk-login-brand">
+          <span className="mk-login-brand__mark" aria-hidden="true">
+            <img className="mk-login-logo-image" src="/Marketylogo.jpeg" alt="" />
           </span>
-          <h1 className="display-6 fw-bold mb-3 text-white">Forgot Your Password?</h1>
-          <p className="fs-6 text-white-75 mb-4">
-            No worries! Enter your email and we'll send you a link to reset your password.
+          <span className="mk-login-brand__copy">
+            <strong>MARKETY</strong>
+            <small>shop smart, live better</small>
+          </span>
+        </header>
+
+        <div className="mk-login-hero__intro">
+          <span className="mk-login-eyebrow">
+            <i className="fas fa-key" aria-hidden="true" />
+            Password reset
+          </span>
+          <h1>
+            Secure account <span>recovery</span>
+          </h1>
+          <p>
+            Enter your account email and we will send a short-lived reset link protected by reCAPTCHA.
           </p>
-          <ul className="login-hero__list">
-            <li>
-              <i className="fas fa-shield-alt me-2 text-warning" />
-              Secure password reset process
-            </li>
-            <li>
-              <i className="fas fa-clock me-2 text-warning" />
-              Link expires in 15 minutes
-            </li>
-            <li>
-              <i className="fas fa-envelope me-2 text-warning" />
-              Check your email for instructions
-            </li>
-          </ul>
         </div>
-      </div>
 
-      <div className="login-form-wrapper d-flex align-items-center justify-content-center flex-grow-1">
-        <div className="login-card glass-card shadow-lg position-relative">
-          <div className="login-card__glow" />
-          <div className="text-center mb-4">
+        <div className="mk-login-features mt-5">
+          {[
+            ['fas fa-shield-alt', 'Protected by reCAPTCHA', 'We verify reset requests before sending mail.'],
+            ['fas fa-clock', 'Short-lived reset link', 'Reset links expire quickly to protect your account.'],
+            ['fas fa-envelope-open-text', 'Email-only recovery', 'Instructions are sent to the registered inbox.'],
+          ].map(([icon, title, description]) => (
+            <article className="mk-login-feature" key={title}>
+              <span className="mk-login-feature__icon">
+                <i className={icon} aria-hidden="true" />
+              </span>
+              <div>
+                <h2>{title}</h2>
+                <p>{description}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="mk-login-panel">
+        <motion.div
+          className="mk-login-card mk-signin-card"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        >
+          <div className="mk-login-card__shine" aria-hidden="true" />
+
+          <header className="mk-login-card__header">
             <motion.div
-              className="auth-brand mx-auto mb-3"
-              initial={{ opacity: 0, y: -8, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className="mk-login-card__logo mk-login-card__logo--brand"
+              initial={{ scale: 0.9, rotate: -6 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
             >
-              <motion.span
-                className="auth-brand__ring"
-                animate={{ rotate: -360 }}
-                transition={{ duration: 16, repeat: Infinity, ease: 'linear' }}
-              />
-              <img src="/Marketylogo.jpeg" alt="Markety" className="auth-brand__logo" />
+              <img className="mk-login-logo-image" src="/Marketylogo.jpeg" alt="Markety" />
             </motion.div>
-            <h2 className="fw-semibold mb-1">Reset Your Password</h2>
-            <p className="text-muted">Enter your email address and we'll send you a reset link.</p>
-          </div>
+            <h2>{t('auth.forgotTitle')}</h2>
+            <p>{t('auth.forgotCopy')}</p>
+          </header>
 
-          <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
-            <div className="form-floating-with-icon">
-              <label className="form-label text-muted small">Email Address</label>
-              <div className="input-icon">
-                <span className="icon">
-                  <i className="fas fa-envelope" />
-                </span>
+          {status && (
+            <div className={status.type === 'success' ? 'mk-login-success' : 'mk-login-error'} role="alert">
+              <i className={status.type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'} aria-hidden="true" />
+              <span>{status.message}</span>
+            </div>
+          )}
+
+          <form className="mk-login-form" onSubmit={handleSubmit}>
+            <div className="mk-login-field">
+              <label htmlFor="forgot-email">{t('auth.email')}</label>
+              <div className="mk-login-input">
+                <i className="far fa-envelope" aria-hidden="true" />
                 <input
+                  id="forgot-email"
                   type="email"
-                  className="form-control form-control-lg"
                   placeholder="name@example.com"
+                  autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
@@ -148,30 +158,26 @@ export const ForgotPasswordPage = () => {
               </div>
             </div>
 
-            <button className="btn btn-primary w-100 py-2 login-submit-btn" type="submit" disabled={isSubmitting}>
+            <button className="mk-login-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-                  Sending reset link…
+                  <span className="mk-login-spinner" aria-hidden="true" />
+                  {t('auth.sendingReset')}
                 </>
               ) : (
                 <>
-                  Send Reset Link <i className="fas fa-paper-plane ms-2" />
+                  <span>{t('auth.sendReset')}</span>
+                  <i className="fas fa-paper-plane" aria-hidden="true" />
                 </>
               )}
             </button>
           </form>
 
-          <div className="mt-4 text-center text-muted">
-            <small>
-              Remember your password?{' '}
-              <Link to="/login" className="fw-semibold text-decoration-none">
-                Sign in here
-              </Link>
-            </small>
-          </div>
-        </div>
-      </div>
-    </div>
+          <p className="mk-login-register">
+            Remember your password? <Link to="/login">Sign in here</Link>
+          </p>
+        </motion.div>
+      </section>
+    </main>
   );
 };

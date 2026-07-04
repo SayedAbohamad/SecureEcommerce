@@ -26,8 +26,12 @@ export const SupportInboxPage = () => {
 
     setIsReplying(true);
     try {
-      await supportApi.reply(selectedTicket.id, replyText);
-      showToast.success('Reply sent successfully!');
+      const result = await supportApi.reply(selectedTicket.id, replyText);
+      if (result.emailDelivered) {
+        showToast.success(result.message || 'Reply sent successfully!');
+      } else {
+        showToast.warning(result.emailWarning || result.message || 'Reply saved, but email delivery could not be confirmed.');
+      }
       setReplyText('');
       setSelectedTicket((prev: SupportTicket | null) => prev ? { ...prev, status: 'Replied', adminReply: replyText } : null);
       queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
@@ -208,6 +212,18 @@ export const SupportInboxPage = () => {
                       >
                         {aiLoading === 'classify' ? 'Classifying...' : 'Classify'}
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="alert alert-warning border-0 py-2 mb-3">
+                    <div className="d-flex gap-2">
+                      <i className="fas fa-shield-alt mt-1" aria-hidden="true" />
+                      <small>
+                        OWASP LLM Top 10 guardrails are enforced for support AI: prompts and ticket text are treated as untrusted,
+                        PII/secrets are redacted, and the assistant cannot change emails, send reset links, bypass 2FA, unlock
+                        accounts, or make authorization decisions. This directly addresses the Meta-style AI support failure where
+                        weak verification could lead to PII exposure and account takeover.
+                      </small>
                     </div>
                   </div>
 

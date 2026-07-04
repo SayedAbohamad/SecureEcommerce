@@ -7,6 +7,10 @@
 	--chat-border: #e7e5ef;
 }
 
+.swal2-container {
+	z-index: 1085;
+}
+
 .chatbot-toggle-btn {
 	position: fixed;
 	left: 18px;

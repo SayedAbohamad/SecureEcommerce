@@ -12,3 +12,5 @@ export * from './notifications';
 export * from './assistant';
 export * from './recommendations';
 export * from './adminInsights';
+export * from './honeypot';
+export * from './securityHealth';

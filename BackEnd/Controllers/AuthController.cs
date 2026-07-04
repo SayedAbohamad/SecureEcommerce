@@ -25,6 +25,8 @@ namespace BackEnd.Controllers
     public class AuthController : ControllerBase
     {
         private const string SelfServiceRole = "Customer";
+        private const int MaxOtpAttempts = 5;
+        private static readonly TimeSpan TwoFactorCodeLifetime = TimeSpan.FromMinutes(10);
         private static readonly ConfigurationManager<OpenIdConnectConfiguration> GoogleOpenIdConfiguration =
             new(
                 "https://accounts.google.com/.well-known/openid-configuration",
@@ -38,6 +40,7 @@ namespace BackEnd.Controllers
         private readonly IEmailService _emailService;
         private readonly ApplicationDbContext _db;
         private readonly IRecaptchaService _recaptchaService;
+        private readonly IFailedLoginTrackingService _failedLoginTrackingService;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
@@ -47,7 +50,8 @@ namespace BackEnd.Controllers
             ILogger<AuthController> logger,
             IEmailService emailService,
             IRecaptchaService recaptchaService,
-            ApplicationDbContext db)
+            ApplicationDbContext db,
+            IFailedLoginTrackingService failedLoginTrackingService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -57,6 +61,7 @@ namespace BackEnd.Controllers
             _emailService = emailService;
             _recaptchaService = recaptchaService;
             _db = db;
+            _failedLoginTrackingService = failedLoginTrackingService;
         }
 
 
@@ -91,6 +96,7 @@ namespace BackEnd.Controllers
                     pending.FullName = model.FullName;
                     pending.PasswordHash = passwordHash;
                     pending.OtpSecret = otpSecret;
+                    pending.FailedAttempts = 0;
                     pending.CreatedAt = DateTime.UtcNow;
                     pending.ExpiresAt = DateTime.UtcNow.AddMinutes(15);
                     _db.PendingRegistrations.Update(pending);
@@ -112,6 +118,7 @@ namespace BackEnd.Controllers
                     FullName = model.FullName,
                     PasswordHash = passwordHash,
                     OtpSecret = otpSecret,
+                    FailedAttempts = 0,
                     CreatedAt = DateTime.UtcNow,
                     ExpiresAt = DateTime.UtcNow.AddMinutes(15)
                 };
@@ -158,6 +165,11 @@ namespace BackEnd.Controllers
                 return BadRequest(new { message = "Verification code has expired. Please register again." });
             }
 
+            if (pending.FailedAttempts >= MaxOtpAttempts)
+            {
+                return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+            }
+
             var totp = new Totp(Base32Encoding.ToBytes(pending.OtpSecret));
             var cleanedCode = code.Trim().Replace(" ", "").Replace("-", "");
             var currentCode = totp.ComputeTotp();
@@ -165,7 +177,17 @@ namespace BackEnd.Controllers
             
             if (!totp.VerifyTotp(cleanedCode, out _, new VerificationWindow(20, 1)))
             {
-                return BadRequest(new { message = "Invalid or expired verification code." });
+                pending.FailedAttempts += 1;
+                _db.PendingRegistrations.Update(pending);
+                await _db.SaveChangesAsync();
+
+                var remainingAttempts = Math.Max(0, MaxOtpAttempts - pending.FailedAttempts);
+                if (remainingAttempts == 0)
+                {
+                    return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+                }
+
+                return BadRequest(new { message = $"Invalid or expired verification code. {remainingAttempts} attempts remaining." });
             }
 
             var existingUser = await _userManager.FindByEmailAsync(email);
@@ -211,6 +233,7 @@ namespace BackEnd.Controllers
         }
 
         [HttpPost("ResendRegistrationOtp")]
+        [EnableRateLimiting("otp")]
         public async Task<IActionResult> ResendRegistrationOtp([FromForm] string email)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -231,6 +254,7 @@ namespace BackEnd.Controllers
             }
 
             pending.OtpSecret = Base32Encoding.ToString(KeyGeneration.GenerateRandomKey(20));
+            pending.FailedAttempts = 0;
             pending.CreatedAt = DateTime.UtcNow;
             pending.ExpiresAt = DateTime.UtcNow.AddMinutes(15);
             _db.PendingRegistrations.Update(pending);
@@ -264,6 +288,7 @@ namespace BackEnd.Controllers
             {
                 _logger.LogWarning("Login failed — unknown email {Email} from IP {IP}.",
                     model.Email, HttpContext.Connection.RemoteIpAddress);
+                await _failedLoginTrackingService.RecordFailedLoginAsync(HttpContext, model.Email, "unknown-email", HttpContext.RequestAborted);
                 return Unauthorized(new { message = "Invalid email or password" });
             }
 
@@ -271,6 +296,7 @@ namespace BackEnd.Controllers
             {
                 _logger.LogWarning("Login attempt on locked account {Email} from IP {IP}.",
                     model.Email, HttpContext.Connection.RemoteIpAddress);
+                await _failedLoginTrackingService.RecordFailedLoginAsync(HttpContext, model.Email, "locked-account", HttpContext.RequestAborted);
                 return Unauthorized(new { message = "This email is suspended. Please contact support or our email." });
             }
 
@@ -281,6 +307,7 @@ namespace BackEnd.Controllers
                 _logger.LogWarning("Invalid password for {Email} from IP {IP}. Failed attempts: {Attempts}.",
                     model.Email, HttpContext.Connection.RemoteIpAddress,
                     await _userManager.GetAccessFailedCountAsync(user));
+                await _failedLoginTrackingService.RecordFailedLoginAsync(HttpContext, model.Email, "bad-password", HttpContext.RequestAborted);
                 return Unauthorized(new { message = "Invalid email or password" });
             }
 
@@ -343,6 +370,9 @@ namespace BackEnd.Controllers
             // 2. Generate OTP using Otp.NET
             var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
             var otp = totp.ComputeTotp();
+            user.TwoFactorRequestedAt = DateTime.UtcNow;
+            user.TwoFactorFailedAttempts = 0;
+            await _userManager.UpdateAsync(user);
 
             // 3. Send Email
             try
@@ -537,17 +567,39 @@ namespace BackEnd.Controllers
             if (user == null || string.IsNullOrEmpty(user.TotpSecret))
                 return Unauthorized("Invalid session.");
 
+            if (!user.TwoFactorRequestedAt.HasValue ||
+                DateTime.UtcNow - user.TwoFactorRequestedAt.Value > TwoFactorCodeLifetime)
+            {
+                return BadRequest(new { message = "Verification code expired. Please request a new code." });
+            }
+
+            if (user.TwoFactorFailedAttempts >= MaxOtpAttempts)
+            {
+                return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+            }
+
             var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
             // Extend validity to 10 minutes (20 steps of 30s)
             bool isValid = totp.VerifyTotp(code.Trim(), out long step, new VerificationWindow(previous: 20, future: 1));
 
             if (!isValid)
             {
+                user.TwoFactorFailedAttempts += 1;
+                await _userManager.UpdateAsync(user);
                 _logger.LogWarning("Invalid 2FA attempt for {Email}. Secret exists: {HasSecret}", email, !string.IsNullOrEmpty(user.TotpSecret));
-                return BadRequest("Invalid or expired verification code.");
+
+                var remainingAttempts = Math.Max(0, MaxOtpAttempts - user.TwoFactorFailedAttempts);
+                if (remainingAttempts == 0)
+                {
+                    return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+                }
+
+                return BadRequest(new { message = $"Invalid or expired verification code. {remainingAttempts} attempts remaining." });
             }
 
             user.LastLogin = DateTime.UtcNow;
+            user.TwoFactorFailedAttempts = 0;
+            user.TwoFactorRequestedAt = null;
             await _userManager.UpdateAsync(user);
 
             // If valid, generate JWT
@@ -653,6 +705,7 @@ namespace BackEnd.Controllers
         }
 
         [HttpPost("Resend2FA")]
+        [EnableRateLimiting("otp")]
         public async Task<IActionResult> Resend2FA([FromForm] string email)
         {
             var user = await _userManager.FindByEmailAsync(email);
@@ -664,6 +717,10 @@ namespace BackEnd.Controllers
                 user.TotpSecret = Base32Encoding.ToString(key);
                 await _userManager.UpdateAsync(user);
             }
+
+            user.TwoFactorRequestedAt = DateTime.UtcNow;
+            user.TwoFactorFailedAttempts = 0;
+            await _userManager.UpdateAsync(user);
 
             var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
             var otp = totp.ComputeTotp();
@@ -681,6 +738,7 @@ namespace BackEnd.Controllers
         }
 
         [HttpPost("SendOTP")]
+        [EnableRateLimiting("otp")]
         public async Task<IActionResult> SendOTP([FromForm] string email)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -716,6 +774,7 @@ namespace BackEnd.Controllers
         //    return ;
         //}
         [HttpPost("RequestPasswordChange")]
+        [EnableRateLimiting("otp")]
         [Authorize]
         public async Task<IActionResult> RequestPasswordChange()
         {
@@ -733,6 +792,7 @@ namespace BackEnd.Controllers
                 UserId = user.Id,
                 Otp = otp,
                 Type = "PASSWORD_CHANGE",
+                FailedAttempts = 0,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(15)
             };
 
@@ -764,8 +824,23 @@ namespace BackEnd.Controllers
             if (pending == null || pending.ExpiresAt < DateTime.UtcNow)
                 return BadRequest(new { message = "Verification code expired or not found." });
 
+            if (pending.FailedAttempts >= MaxOtpAttempts)
+                return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+
             if (pending.Otp != code.Trim())
-                return BadRequest(new { message = "Invalid verification code." });
+            {
+                pending.FailedAttempts += 1;
+                _db.PendingEmailChanges.Update(pending);
+                await _db.SaveChangesAsync();
+
+                var remainingAttempts = Math.Max(0, MaxOtpAttempts - pending.FailedAttempts);
+                if (remainingAttempts == 0)
+                {
+                    return BadRequest(new { message = "Too many invalid verification attempts. Please request a new code." });
+                }
+
+                return BadRequest(new { message = $"Invalid verification code. {remainingAttempts} attempts remaining." });
+            }
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var result = await _userManager.ResetPasswordAsync(user, token, newPassword);

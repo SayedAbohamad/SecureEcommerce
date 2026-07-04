@@ -4,15 +4,24 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import classNames from 'classnames';
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { useWishlist } from '../hooks/useWishlist';
+import { useLanguage } from '../hooks/useLanguage';
+import { useTheme } from '../hooks/useTheme';
 import { cartApi, productApi, notificationApi, recommendationApi } from '../api';
 import { resolveImageUrl } from '../utils/media';
 import { BackToTop } from '../components/common/BackToTop';
 import { ChatbotWidget } from '../components/chat/ChatbotWidget';
 
+const normalizeSearchText = (value: string) => value.trim().toLowerCase();
+const searchTokens = (value: string) => normalizeSearchText(value).split(/\s+/).filter(Boolean);
+
 export const CustomerLayout = () => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
+  const { language, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const { wishlist } = useWishlist();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,8 +54,11 @@ export const CustomerLayout = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node) &&
-          mobileSearchRef.current && !mobileSearchRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedDesktopSearch = searchRef.current?.contains(target) ?? false;
+      const clickedMobileSearch = mobileSearchRef.current?.contains(target) ?? false;
+
+      if (!clickedDesktopSearch && !clickedMobileSearch) {
         setShowDropdown(false);
       }
     };
@@ -55,99 +67,58 @@ export const CustomerLayout = () => {
   }, []);
 
   const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q || !products) return [];
+    const tokens = searchTokens(searchQuery);
+    if (tokens.length === 0 || !products) return [];
+
     return products
       .filter((p) => {
-        const inName = p.name.toLowerCase().includes(q);
-        const inDesc = (p.description ?? '').toLowerCase().includes(q);
-        const inCategory = (p.categoryName ?? '').toLowerCase().includes(q);
-        return inName || inDesc || inCategory;
+        const haystack = normalizeSearchText(
+          `${p.name} ${p.description ?? ''} ${p.categoryName ?? ''}`,
+        );
+        return tokens.every((token) => haystack.includes(token));
       })
-      .slice(0, 6); // Max 6 results
+      .slice(0, 6);
   }, [searchQuery, products]);
+
+  const submitSearch = (source: 'header_search' | 'header_dropdown') => {
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    recommendationApi.trackQuietly({
+      eventType: 'search_query',
+      searchQuery: query,
+      source,
+    });
+    navigate(`/shop?search=${encodeURIComponent(query)}`);
+    setShowDropdown(false);
+    setSearchQuery('');
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim();
-      recommendationApi.trackQuietly({
-        eventType: 'search_query',
-        searchQuery: query,
-        source: 'header_search',
-      });
-      navigate(`/shop?search=${encodeURIComponent(query)}`);
-      setShowDropdown(false);
-      setSearchQuery('');
-    }
+    submitSearch('header_search');
   };
 
   const navItems = [
-    { to: '/', label: 'Home', icon: 'fas fa-home', exact: true },
-    { to: '/shop', label: 'Shop', icon: 'fas fa-store' },
-    { to: '/contact', label: 'Contact', icon: 'fas fa-headset' },
+    { to: '/', label: t('navbar.home'), icon: 'fas fa-home', exact: true },
+    { to: '/shop', label: t('navbar.shop'), icon: 'fas fa-store' },
+    { to: '/contact', label: t('navbar.contact'), icon: 'fas fa-headset' },
   ];
 
   if (user) {
-    navItems.push({ to: '/orders', label: 'My Orders', icon: 'fas fa-box-open' });
+    navItems.push({ to: '/orders', label: t('navbar.orders'), icon: 'fas fa-box-open' });
   }
 
-  return (
-    <div className="d-flex flex-column min-vh-100" style={{ background: '#F8F9FA' }}>
-      {/* Top Utility Bar */}
-      <div className="topbar text-white small" style={{ background: '#5B3DC8' }}>
-        <Container className="d-flex justify-content-between align-items-center py-1 flex-wrap gap-2">
-          <div className="d-flex gap-3 align-items-center flex-wrap topbar-contact">
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>
-              <i className="fas fa-phone-alt me-2" />
-              +20 100 000 0000
-            </span>
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>
-              <i className="fas fa-envelope me-2" />
-              support@markety.com
-            </span>
-          </div>
-          <div className="d-flex align-items-center gap-3 flex-wrap topbar-meta">
-            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.8rem' }}>
-              <i className="fas fa-truck me-2" />
-              Free Shipping on Orders Over 500 EGP
-            </span>
-            {user ? (
-              <Dropdown align="end">
-                <Dropdown.Toggle className="topbar-account-toggle btn btn-sm border-0 text-white">
-                  <i className="fas fa-user-circle me-2" />
-                  <span className="fw-semibold me-1">{user.fullName}</span>
-                  <i className="fas fa-chevron-down small" />
-                </Dropdown.Toggle>
-                <Dropdown.Menu className="topbar-account-menu border-0 shadow">
-                  <Dropdown.Item as={NavLink} to="/profile" className="d-flex align-items-center gap-2">
-                    <i className="fas fa-id-badge text-primary" />
-                    Profile
-                  </Dropdown.Item>
-                  <Dropdown.Item as={NavLink} to="/settings" className="d-flex align-items-center gap-2">
-                    <i className="fas fa-cog text-primary" />
-                    Settings
-                  </Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item as="button" onClick={logout} className="topbar-logout-item d-flex align-items-center gap-2">
-                    <i className="fas fa-right-from-bracket" />
-                    Logout
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
-            ) : (
-              <NavLink to="/login" style={{ color: '#fff', textDecoration: 'none' }}>
-                <i className="fas fa-sign-in-alt me-2" />
-                Login / Register
-              </NavLink>
-            )}
-          </div>
-        </Container>
-      </div>
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
+  return (
+    <div className="customer-shell d-flex flex-column min-vh-100">
       {/* Main Header */}
-      <header className="shadow-sm bg-white sticky-top" style={{ zIndex: 1020 }}>
-        <Navbar expand="lg" className="py-2">
+      <header className="customer-main-header shadow-sm bg-white sticky-top" style={{ zIndex: 1020 }}>
+        <Navbar expand="lg" className="customer-navbar py-2">
           <Container className="d-flex align-items-center">
             {/* Logo */}
             <Navbar.Brand as={NavLink} to="/" className="d-flex align-items-center me-4" style={{ textDecoration: 'none' }}>
@@ -168,7 +139,7 @@ export const CustomerLayout = () => {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search laptops, GPUs, components, and accessories..."
+                  placeholder={`${t('common.search')} laptops, GPUs, components, and accessories...`}
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -244,7 +215,7 @@ export const CustomerLayout = () => {
                           type="button"
                           className="btn btn-light w-100 mt-2 fw-semibold"
                           style={{ color: '#5B3DC8', fontSize: '0.85rem' }}
-                          onClick={handleSearch}
+                          onClick={() => submitSearch('header_dropdown')}
                         >
                           View all results <i className="fas fa-arrow-right ms-1"></i>
                         </button>
@@ -263,13 +234,13 @@ export const CustomerLayout = () => {
             {/* Right Side - Icons */}
             <div className="d-flex align-items-center gap-2 ms-auto ms-lg-0">
               {user && (
-                <NavLink
-                  to="/wishlist"
-                  className="btn btn-sm position-relative d-flex align-items-center gap-1"
-                  style={{ color: '#1A1A2E', background: 'transparent', border: 'none' }}
-                >
+                <motion.div whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.96 }}>
+                  <NavLink
+                    to="/wishlist"
+                    className="customer-icon-action btn btn-sm position-relative d-flex align-items-center gap-1"
+                  >
                   <i className="fas fa-heart" style={{ fontSize: '1.1rem' }} />
-                  <span className="d-none d-xl-inline" style={{ fontSize: '0.8rem' }}>Wishlist</span>
+                  <span className="d-none d-xl-inline" style={{ fontSize: '0.8rem' }}>{t('navbar.wishlist')}</span>
                   {wishlistCount > 0 && (
                     <span
                       className="position-absolute badge rounded-pill"
@@ -284,11 +255,18 @@ export const CustomerLayout = () => {
                       {wishlistCount}
                     </span>
                   )}
-                </NavLink>
+                  </NavLink>
+                </motion.div>
               )}
               {user && (
                 <Dropdown align="end" className="d-flex align-items-center">
-                  <Dropdown.Toggle as="div" className="btn btn-sm position-relative d-flex align-items-center gap-1 border-0" style={{ cursor: 'pointer', color: '#1A1A2E' }}>
+                  <Dropdown.Toggle
+                    as={motion.div}
+                    whileHover={{ y: -2, scale: 1.03 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="customer-icon-action btn btn-sm position-relative d-flex align-items-center gap-1 border-0"
+                    style={{ cursor: 'pointer' }}
+                  >
                     <i className="fas fa-bell" style={{ fontSize: '1.1rem' }} />
                     {unreadNotificationsCount > 0 && (
                       <span
@@ -307,16 +285,16 @@ export const CustomerLayout = () => {
                   </Dropdown.Toggle>
                   <Dropdown.Menu className="shadow-lg border-0 overflow-hidden" style={{ width: '320px' }}>
                     <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
-                      <span className="fw-bold text-dark">Notifications</span>
+                      <span className="fw-bold text-dark">{t('navbar.notifications')}</span>
                       {unreadNotificationsCount > 0 && (
-                        <span className="badge bg-danger-subtle text-danger">{unreadNotificationsCount} New</span>
+                        <span className="badge bg-danger-subtle text-danger">{unreadNotificationsCount} {t('navbar.new')}</span>
                       )}
                     </div>
                     <div className="p-0 overflow-auto" style={{ maxHeight: '350px' }}>
                       {!notifications || notifications.length === 0 ? (
                         <div className="text-center py-5">
                           <i className="far fa-bell-slash text-muted mb-2 fs-3" style={{ opacity: 0.3 }} />
-                          <p className="text-muted small mb-0">No notifications yet</p>
+                          <p className="text-muted small mb-0">{t('navbar.emptyNotifications')}</p>
                         </div>
                       ) : (
                         notifications.slice(0, 5).map(n => (
@@ -332,16 +310,22 @@ export const CustomerLayout = () => {
                     </div>
                     <div className="p-2 border-top bg-light text-center">
                       <button className="btn btn-link text-primary text-decoration-none small fw-semibold p-0 w-100" onClick={() => navigate('/profile/notifications')}>
-                        View All Notifications
+                        {t('navbar.viewAllNotifications')}
                       </button>
                     </div>
                   </Dropdown.Menu>
                 </Dropdown>
               )}
               <Dropdown align="end" className="d-flex align-items-center">
-                <Dropdown.Toggle as="div" className="btn btn-sm position-relative d-flex align-items-center gap-1 border-0" style={{ cursor: 'pointer' }}>
+                <Dropdown.Toggle
+                  as={motion.div}
+                  whileHover={{ y: -2, scale: 1.03 }}
+                  whileTap={{ scale: 0.96 }}
+                  className="customer-icon-action btn btn-sm position-relative d-flex align-items-center gap-1 border-0"
+                  style={{ cursor: 'pointer' }}
+                >
                   <i className="fas fa-shopping-cart" style={{ fontSize: '1.1rem' }} />
-                  <span className="d-none d-xl-inline" style={{ fontSize: '0.8rem' }}>Cart</span>
+                  <span className="d-none d-xl-inline" style={{ fontSize: '0.8rem' }}>{t('navbar.cart')}</span>
                   {cartCount > 0 && (
                     <span
                       className="position-absolute badge rounded-pill"
@@ -360,14 +344,14 @@ export const CustomerLayout = () => {
 
                 <Dropdown.Menu className="cart-dropdown p-0 shadow-lg border-0 overflow-hidden">
                   <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
-                    <span className="fw-bold text-dark">Order Summary</span>
-                    <span className="badge bg-primary-subtle text-primary">{cartCount} Items</span>
+                    <span className="fw-bold text-dark">{t('navbar.orderSummary')}</span>
+                    <span className="badge bg-primary-subtle text-primary">{cartCount} {t('navbar.items')}</span>
                   </div>
                   <div className="p-3 overflow-auto" style={{ maxHeight: '300px' }}>
                     {!cartItems || cartItems.length === 0 ? (
                       <div className="text-center py-4">
                         <i className="fas fa-shopping-basket text-muted mb-2 fs-3" style={{ opacity: 0.3 }} />
-                        <p className="text-muted small mb-0">Your cart is empty</p>
+                        <p className="text-muted small mb-0">{t('navbar.emptyCart')}</p>
                       </div>
                     ) : (
                       cartItems.map((item) => (
@@ -478,7 +462,7 @@ export const CustomerLayout = () => {
                             type="button"
                             className="btn btn-light w-100 mt-2 fw-semibold"
                             style={{ color: '#5B3DC8', fontSize: '0.85rem' }}
-                            onClick={handleSearch}
+                            onClick={() => submitSearch('header_dropdown')}
                           >
                             View all results <i className="fas fa-arrow-right ms-1"></i>
                           </button>
@@ -514,6 +498,50 @@ export const CustomerLayout = () => {
                   </motion.li>
                 ))}
               </Nav>
+
+              <div className="customer-nav-controls">
+                <button type="button" className="mk-nav-control" onClick={toggleLanguage} aria-label="Toggle language">
+                  <i className="fas fa-globe" aria-hidden="true" />
+                  <span>{language === 'ar' ? t('common.english') : t('common.arabic')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="mk-nav-control mk-nav-control--icon"
+                  onClick={toggleTheme}
+                  aria-label={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+                  title={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+                >
+                  <i className={theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon'} aria-hidden="true" />
+                </button>
+                {user ? (
+                  <Dropdown align="end" className="customer-nav-account">
+                    <Dropdown.Toggle className="mk-nav-control mk-nav-account-toggle">
+                      <i className="fas fa-user-circle" aria-hidden="true" />
+                      <span className="mk-nav-account-name">{user.fullName}</span>
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="mk-nav-account-menu border-0 shadow">
+                      <Dropdown.Item as={NavLink} to="/profile" className="d-flex align-items-center gap-2">
+                        <i className="fas fa-id-badge text-primary" />
+                        Profile
+                      </Dropdown.Item>
+                      <Dropdown.Item as={NavLink} to="/settings" className="d-flex align-items-center gap-2">
+                        <i className="fas fa-cog text-primary" />
+                        Settings
+                      </Dropdown.Item>
+                      <Dropdown.Divider />
+                      <Dropdown.Item as="button" onClick={handleLogout} className="d-flex align-items-center gap-2 text-danger">
+                        <i className="fas fa-right-from-bracket" />
+                        {t('common.logout')}
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
+                ) : (
+                  <NavLink to="/login" className="mk-nav-auth-link">
+                    <i className="fas fa-sign-in-alt" aria-hidden="true" />
+                    <span>{t('common.loginRegister')}</span>
+                  </NavLink>
+                )}
+              </div>
             </Navbar.Collapse>
           </Container>
         </Navbar>
@@ -544,15 +572,15 @@ export const CustomerLayout = () => {
                 Your destination for laptops, gaming PCs, components, monitors, storage, and accessories with fast delivery and secure shopping.
               </p>
               <div className="d-flex gap-3 mt-3">
-                <a href="#" className="d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none', transition: 'all 0.3s' }}>
+                <button type="button" aria-label="Facebook" className="d-flex align-items-center justify-content-center border-0" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', transition: 'all 0.3s' }}>
                   <i className="fab fa-facebook-f" />
-                </a>
-                <a href="#" className="d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none' }}>
+                </button>
+                <button type="button" aria-label="Twitter" className="d-flex align-items-center justify-content-center border-0" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
                   <i className="fab fa-twitter" />
-                </a>
-                <a href="#" className="d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none' }}>
+                </button>
+                <button type="button" aria-label="Instagram" className="d-flex align-items-center justify-content-center border-0" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
                   <i className="fab fa-instagram" />
-                </a>
+                </button>
               </div>
             </div>
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion, Variants } from 'framer-motion';
 import classNames from 'classnames';
+import { useTranslation } from 'react-i18next';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -30,6 +31,7 @@ const cardVariants: Variants = {
 const toCurrency = (value: number) => formatCurrencyEGP(value);
 
 export const DashboardPage = () => {
+  const { t } = useTranslation();
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoryApi.getAll(),
@@ -113,28 +115,28 @@ export const DashboardPage = () => {
 
   const stats = [
     {
-      label: 'Revenue',
+      label: t('dashboard.revenue'),
       value: toCurrency(totalRevenue),
       icon: 'fas fa-coins',
       tone: 'emerald',
       subtitle: 'Total confirmed order value',
     },
     {
-      label: 'Orders',
+      label: t('dashboard.orders'),
       value: totalOrders,
       icon: 'fas fa-clipboard-check',
       tone: 'blue',
       subtitle: `${toCurrency(totalOrders ? totalRevenue / totalOrders : 0)} avg order`,
     },
     {
-      label: 'Products',
+      label: t('dashboard.products'),
       value: products?.length ?? 0,
       icon: 'fas fa-box',
       tone: 'amber',
       subtitle: `${categories?.length ?? 0} active categories`,
     },
     {
-      label: 'Customers',
+      label: t('dashboard.customers'),
       value: customers?.totalCount ?? 0,
       icon: 'fas fa-user-friends',
       tone: 'violet',
@@ -146,7 +148,7 @@ export const DashboardPage = () => {
     { to: '/admin/products', icon: 'fas fa-plus-circle', label: 'Add Product', description: 'Create a new item' },
     { to: '/admin/orders', icon: 'fas fa-truck', label: 'Track Orders', description: 'Update fulfilment status' },
     { to: '/admin/categories', icon: 'fas fa-layer-group', label: 'Manage Categories', description: 'Organise catalogue' },
-    { to: '/admin/customers', icon: 'fas fa-user-shield', label: 'Manage Customers', description: 'Roles & accounts' },
+    { to: '/admin/users', icon: 'fas fa-user-shield', label: 'Manage Customers', description: 'Roles & accounts' },
   ];
 
   const loading = categoriesLoading || productsLoading || ordersLoading || customersLoading;
@@ -191,7 +193,7 @@ export const DashboardPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <div>
-                  <h5 className="fw-semibold mb-0">Revenue (6 months)</h5>
+                  <h5 className="fw-semibold mb-0">{t('dashboard.revenueChart')}</h5>
                   <small className="text-muted">Smoothed area chart of order totals</small>
                 </div>
                 <span className="badge bg-primary-subtle text-primary">
@@ -223,7 +225,7 @@ export const DashboardPage = () => {
         <div className="col-xxl-4">
           <div className="admin-panel card border-0 h-100">
             <div className="card-body">
-              <h5 className="fw-semibold mb-3">Orders by Status</h5>
+              <h5 className="fw-semibold mb-3">{t('dashboard.ordersByStatus')}</h5>
               <div style={{ height: 280 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={statusBreakdown}>
@@ -246,7 +248,7 @@ export const DashboardPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between gap-3 mb-3">
                 <div>
-                  <h5 className="fw-semibold mb-0">AI Insights</h5>
+                  <h5 className="fw-semibold mb-0">{t('dashboard.aiInsights')}</h5>
                   <small className="text-muted">
                     {aiInsights?.generatedAt
                       ? `Generated ${new Date(aiInsights.generatedAt).toLocaleString()}`
@@ -296,7 +298,7 @@ export const DashboardPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between gap-3 mb-3">
                 <div>
-                  <h5 className="fw-semibold mb-0">Security AI Insights</h5>
+                  <h5 className="fw-semibold mb-0">{t('dashboard.securityInsights')}</h5>
                   <small className="text-muted">
                     {securityInsights?.generatedAt
                       ? `Generated ${new Date(securityInsights.generatedAt).toLocaleString()}`
@@ -365,7 +367,7 @@ export const DashboardPage = () => {
           <div className="admin-panel card border-0 h-100">
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between mb-3">
-                <h5 className="fw-semibold mb-0">Quick Actions</h5>
+                <h5 className="fw-semibold mb-0">{t('dashboard.quickActions')}</h5>
                 <span className="badge bg-warning-subtle text-warning">
                   <i className="fas fa-bolt me-2" />
                   Shortcuts
@@ -398,7 +400,7 @@ export const DashboardPage = () => {
           <div className="admin-panel card border-0 h-100">
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between mb-3">
-                <h5 className="fw-semibold mb-0">Top Priced Tech</h5>
+                <h5 className="fw-semibold mb-0">{t('dashboard.topTech')}</h5>
                 <small className="text-muted">Premium systems and components in the catalog</small>
               </div>
               <ul className="list-group list-group-flush">

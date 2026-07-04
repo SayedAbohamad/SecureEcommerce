@@ -25,6 +25,8 @@ import { OrdersPage as AdminOrdersPage } from '../modules/admin/pages/OrdersPage
 import { UsersPage } from '../modules/admin/pages/UsersPage';
 import { PromoCodesPage } from '../modules/admin/pages/PromoCodesPage';
 import { SupportInboxPage } from '../modules/admin/pages/SupportInboxPage';
+import { HoneypotAnalyticsPage } from '../modules/admin/pages/HoneypotAnalyticsPage';
+import { SecurityHealthPage } from '../modules/admin/pages/SecurityHealthPage';
 
 export const AppRouter = () => {
   return (
@@ -69,6 +71,16 @@ export const AppRouter = () => {
         <Route path="promo-codes" element={
           <ProtectedRoute roles={['Admin']}>
             <PromoCodesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="honeypot" element={
+          <ProtectedRoute roles={['Admin']}>
+            <HoneypotAnalyticsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="security-health" element={
+          <ProtectedRoute roles={['Admin']}>
+            <SecurityHealthPage />
           </ProtectedRoute>
         } />
       </Route>

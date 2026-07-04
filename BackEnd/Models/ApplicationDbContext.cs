@@ -26,6 +26,9 @@ namespace BackEnd.Models
         public DbSet<PendingEmailChange> PendingEmailChanges { get; set; }
         public DbSet<UserBehaviorEvent> UserBehaviorEvents { get; set; }
         public DbSet<UserPreference> UserPreferences { get; set; }
+        public DbSet<HoneypotEvent> HoneypotEvents { get; set; }
+        public DbSet<FailedLoginAttempt> FailedLoginAttempts { get; set; }
+        public DbSet<BlockedIpAddress> BlockedIpAddresses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -42,6 +45,10 @@ namespace BackEnd.Models
                    .WithOne(r => r.User)
                    .HasForeignKey(r => r.UserId)
                    .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<ApplicationUser>()
+                   .Property(u => u.ReceiveSupportEmails)
+                   .HasDefaultValue(true);
 
             builder.Entity<Review>()
                    .Property(r => r.Rating)
@@ -108,6 +115,15 @@ namespace BackEnd.Models
                    .WithMany()
                    .HasForeignKey(p => p.CategoryId)
                    .OnDelete(DeleteBehavior.NoAction);
+
+            builder.Entity<HoneypotEvent>().HasIndex(e => e.CreatedAt);
+            builder.Entity<HoneypotEvent>().HasIndex(e => e.IpAddress);
+            builder.Entity<HoneypotEvent>().HasIndex(e => e.Path);
+
+            builder.Entity<FailedLoginAttempt>().HasIndex(e => e.AttemptedAt);
+            builder.Entity<FailedLoginAttempt>().HasIndex(e => e.IpAddress);
+
+            builder.Entity<BlockedIpAddress>().HasIndex(e => e.IpAddress).IsUnique();
         }
     }
 }

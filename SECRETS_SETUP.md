@@ -2,6 +2,7 @@
 
 `BackEnd/appsettings.json` and `BackEnd/appsettings.Development.json` keep only non-secret structure. Real local values belong in .NET User Secrets. Production should provide the same keys through environment variables or the hosting provider's secret manager.
 
+dotnet user-secrets list --project BackEnd/BackEnd.csproj
 Run these from the repository root:
 
 ```powershell

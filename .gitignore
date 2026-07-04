@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
 **/appsettings.*.local.json
 **/appsettings.Secrets.json
 **/appsettings.*.secrets.json

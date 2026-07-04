@@ -237,6 +237,8 @@ namespace BackEnd.Controllers
 
             // Send email notification to the user if they allow it
             bool sendEmail = true;
+            bool emailDelivered = false;
+            string? emailWarning = null;
             string targetEmail = ticket.Email;
 
             if (user != null)
@@ -244,6 +246,7 @@ namespace BackEnd.Controllers
                 if (!user.ReceiveSupportEmails)
                 {
                     sendEmail = false;
+                    emailWarning = "Reply was saved, but this user has disabled support reply emails.";
                 }
                 if (!string.IsNullOrEmpty(user.NotificationEmail))
                 {
@@ -280,16 +283,24 @@ namespace BackEnd.Controllers
 </div>";
 
                     await _emailService.SendEmailAsync(targetEmail, $"Re: {ticket.Subject} — Markety Support", emailBody);
+                    emailDelivered = true;
                     _logger.LogInformation("Support reply email sent to {Email} for ticket {TicketId}.", targetEmail, ticket.Id);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to send support reply email to {Email} for ticket {TicketId}.", targetEmail, ticket.Id);
+                    emailWarning = "Reply was saved, but the email could not be delivered. Check SMTP settings and logs.";
                     // Don't fail the reply if email fails — the reply is already saved
                 }
             }
 
-            return Ok(new { message = "Reply sent successfully." });
+            return Ok(new
+            {
+                message = emailDelivered ? "Reply sent successfully." : "Reply saved with an email delivery warning.",
+                emailDelivered,
+                emailSkipped = !sendEmail,
+                emailWarning
+            });
         }
 
         // ── Close a ticket ────────────────────────────────────────────────

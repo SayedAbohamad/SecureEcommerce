@@ -57,8 +57,12 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IReviewSummaryService, ReviewSummaryService>();
 builder.Services.AddScoped<IProductContentAiService, ProductContentAiService>();
 builder.Services.AddScoped<ISupportTicketAiService, SupportTicketAiService>();
+builder.Services.AddSingleton<IAiSafetyService, AiSafetyService>();
 builder.Services.AddScoped<IAdminInsightsService, AdminInsightsService>();
 builder.Services.AddScoped<ISecurityInsightsService, SecurityInsightsService>();
+builder.Services.AddScoped<IHoneypotService, HoneypotService>();
+builder.Services.AddScoped<IFailedLoginTrackingService, FailedLoginTrackingService>();
+builder.Services.AddScoped<ISecurityHealthService, SecurityHealthService>();
 
 builder.Services.Configure<RecommendationSettings>(builder.Configuration.GetSection("Recommendations"));
 builder.Services.AddMemoryCache();
@@ -163,6 +167,14 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { message = "Too many requests. Please try again in a few minutes." },
+            cancellationToken);
+    };
 
     // Strict limiter for authentication endpoints
     options.AddFixedWindowLimiter("auth", limiter =>
@@ -170,6 +182,24 @@ builder.Services.AddRateLimiter(options =>
         limiter.PermitLimit = 20;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
+    });
+
+    options.AddPolicy("otp", context =>
+    {
+        var emailKey = context.User.Identity?.Name ?? "anonymous";
+        if (context.Request.HasFormContentType && context.Request.Form.TryGetValue("email", out var email))
+        {
+            emailKey = email.FirstOrDefault() ?? emailKey;
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{context.Connection.RemoteIpAddress}:{emailKey.ToLowerInvariant()}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            });
     });
 
     options.AddFixedWindowLimiter("ai", limiter =>
@@ -216,6 +246,12 @@ if (builder.Configuration.GetValue("CatalogSeed:Enabled", true))
     await CatalogSeeder.SynchronizeAsync(catalogContext, app.Logger);
 }
 
+if (builder.Configuration.GetValue("AdminSeed:Enabled", false))
+{
+    using var scope = app.Services.CreateScope();
+    await IdentitySeeder.SeedAsync(scope.ServiceProvider, builder.Configuration, app.Logger);
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
@@ -231,7 +267,12 @@ app.UseSecurityHeaders();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseSerilogRequestLogging(); // structured HTTP request logging (#8)
-app.UseHttpsRedirection();
+
+if (builder.Configuration.GetValue("HttpsRedirection:Enabled", true))
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors("FrontendPolicy");
 app.UseRateLimiter();
 app.UseAuthentication();

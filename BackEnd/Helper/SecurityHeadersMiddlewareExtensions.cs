@@ -13,31 +13,20 @@ public static class SecurityHeadersMiddlewareExtensions
             var h = context.Response.Headers;
 
             // Prevent MIME-type sniffing (#6 XSS / #5 misconfiguration)
-            h["X-Content-Type-Options"] = "nosniff";
+            h["X-Content-Type-Options"] = SecurityHeaderPolicy.ContentTypeOptions;
 
             // Prevent clickjacking (#6 XSS)
-            h["X-Frame-Options"] = "DENY";
+            h["X-Frame-Options"] = SecurityHeaderPolicy.FrameOptions;
 
             // Referrer leakage reduction (#5 misconfiguration)
-            h["Referrer-Policy"] = "strict-origin-when-cross-origin";
+            h["Referrer-Policy"] = SecurityHeaderPolicy.ReferrerPolicy;
 
             // Restrict browser features (#5 misconfiguration)
-            h["Permissions-Policy"] =
-                "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+            h["Permissions-Policy"] = SecurityHeaderPolicy.PermissionsPolicy;
 
             // Content-Security-Policy — restricts resource origins (#6 XSS / #5 misconfiguration).
             // Adjust 'connect-src' and 'img-src' as needed for your CDN / Stripe domains.
-            h["Content-Security-Policy"] =
-                "default-src 'self'; " +
-                "script-src 'self' https://js.stripe.com; " +
-                "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: https:; " +
-                "font-src 'self' https://fonts.gstatic.com; " +
-                "connect-src 'self' https://api.stripe.com; " +
-                "frame-src https://js.stripe.com; " +
-                "object-src 'none'; " +
-                "base-uri 'self'; " +
-                "form-action 'self';";
+            h["Content-Security-Policy"] = SecurityHeaderPolicy.ContentSecurityPolicy;
 
             // Prevent information disclosure
             h["X-Powered-By"] = string.Empty; // remove server banner

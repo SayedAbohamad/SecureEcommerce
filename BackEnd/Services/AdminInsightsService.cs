@@ -27,15 +27,27 @@ public sealed class AdminInsightsService : IAdminInsightsService
 
     private readonly ApplicationDbContext _context;
     private readonly IGenerativeAiClient _aiClient;
+    private readonly IAiSafetyService _aiSafety;
     private readonly ILogger<AdminInsightsService> _logger;
 
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public AdminInsightsService(
         ApplicationDbContext context,
         IGenerativeAiClient aiClient,
         ILogger<AdminInsightsService> logger)
+        : this(context, aiClient, new AiSafetyService(), logger)
+    {
+    }
+
+    public AdminInsightsService(
+        ApplicationDbContext context,
+        IGenerativeAiClient aiClient,
+        IAiSafetyService aiSafety,
+        ILogger<AdminInsightsService> logger)
     {
         _context = context;
         _aiClient = aiClient;
+        _aiSafety = aiSafety;
         _logger = logger;
     }
 
@@ -47,7 +59,11 @@ public sealed class AdminInsightsService : IAdminInsightsService
         GenerativeAiResult? aiResult = null;
         try
         {
-            aiResult = await _aiClient.GenerateJsonAsync(SystemInstructions, input, cancellationToken, temperature: 0.25);
+            aiResult = await _aiClient.GenerateJsonAsync(
+                SystemInstructions + _aiSafety.GetSystemSafetyAddendum(),
+                _aiSafety.SanitizeInput(input, 6000),
+                cancellationToken,
+                temperature: 0.25);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -58,6 +74,10 @@ public sealed class AdminInsightsService : IAdminInsightsService
             var parsed = TryParse(aiResult.RawJson);
             if (parsed != null)
             {
+                parsed.Summary = _aiSafety.SanitizeOutput(parsed.Summary, 1000);
+                parsed.SuggestedActions = parsed.SuggestedActions
+                    .Select(action => _aiSafety.SanitizeOutput(action, 220))
+                    .ToList();
                 parsed.Provider = aiResult.Provider;
                 parsed.Metrics = metrics;
                 return parsed;

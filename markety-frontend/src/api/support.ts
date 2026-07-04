@@ -68,8 +68,8 @@ export const supportApi = {
     return data;
   },
 
-  async reply(id: string, reply: string): Promise<{ message: string }> {
-    const { data } = await axiosClient.post(`${resource}/${id}/reply`, { reply });
+  async reply(id: string, reply: string): Promise<{ message: string; emailDelivered: boolean; emailSkipped: boolean; emailWarning?: string }> {
+    const { data } = await axiosClient.post<{ message: string; emailDelivered: boolean; emailSkipped: boolean; emailWarning?: string }>(`${resource}/${id}/reply`, { reply });
     return data;
   },
 

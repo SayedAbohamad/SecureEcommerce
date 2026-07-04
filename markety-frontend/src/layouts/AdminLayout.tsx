@@ -1,31 +1,47 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import classNames from 'classnames';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
+import { useLanguage } from '../hooks/useLanguage';
+import { useTheme } from '../hooks/useTheme';
 
 export const AdminLayout = () => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
+  const { language, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const isAdmin = user?.roles.includes('Admin');
 
   const NAV_ITEMS = [
-    { to: '/admin', icon: 'fas fa-chart-line', label: 'Dashboard', exact: true, iconColor: '#22D3EE' },
+    { to: '/admin', icon: 'fas fa-chart-line', label: t('admin.dashboard'), exact: true, iconColor: '#22D3EE' },
     ...(isAdmin ? [
-      { to: '/admin/categories', icon: 'fas fa-folder-open', label: 'Categories', iconColor: '#F59E0B' },
-      { to: '/admin/products', icon: 'fas fa-box', label: 'Products', iconColor: '#10B981' },
-      { to: '/admin/promo-codes', icon: 'fas fa-ticket-alt', label: 'Promo Codes', iconColor: '#EC4899' },
+      { to: '/admin/categories', icon: 'fas fa-folder-open', label: t('admin.categories'), iconColor: '#F59E0B' },
+      { to: '/admin/products', icon: 'fas fa-box', label: t('admin.products'), iconColor: '#10B981' },
+      { to: '/admin/promo-codes', icon: 'fas fa-ticket-alt', label: t('admin.promoCodes'), iconColor: '#EC4899' },
     ] : []),
-    { to: '/admin/orders', icon: 'fas fa-shopping-bag', label: 'Orders', iconColor: '#FB7185' },
-    { to: '/admin/users', icon: 'fas fa-users-cog', label: 'Users', iconColor: '#A78BFA' },
-    { to: '/admin/support', icon: 'fas fa-envelope-open-text', label: 'Support Inbox', iconColor: '#3B82F6' },
+    { to: '/admin/orders', icon: 'fas fa-shopping-bag', label: t('admin.orders'), iconColor: '#FB7185' },
+    { to: '/admin/users', icon: 'fas fa-users-cog', label: t('admin.users'), iconColor: '#A78BFA' },
+    { to: '/admin/support', icon: 'fas fa-envelope-open-text', label: t('admin.supportInbox'), iconColor: '#3B82F6' },
+    ...(isAdmin ? [
+      { to: '/admin/honeypot', icon: 'fas fa-shield-virus', label: 'Honeypot Analytics', iconColor: '#EF4444' },
+      { to: '/admin/security-health', icon: 'fas fa-heartbeat', label: 'Security Health', iconColor: '#0EA5E9' },
+    ] : []),
   ];
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   const renderSidebarNav = (isCompact: boolean) => (
-    <nav className="admin-sidebar__nav flex-grow-1 overflow-auto py-4">
+    <nav className="admin-sidebar__nav py-4">
       <ul className="list-unstyled mb-0">
         {NAV_ITEMS.map((item) => (
           <li key={item.to} className={isCompact ? 'px-2' : 'px-3'}>
@@ -58,7 +74,7 @@ export const AdminLayout = () => {
                       transition={{ type: 'spring', stiffness: 250, damping: 25 }}
                     >
                       <i className="fas fa-circle me-1" />
-                      Live
+                      {t('admin.live')}
                     </motion.span>
                   )}
                 </>
@@ -90,7 +106,7 @@ export const AdminLayout = () => {
                   <h2 className="h5 mb-0 text-white" style={{ letterSpacing: '-0.5px' }}>
                     Markety
                   </h2>
-                  <span className="admin-sidebar__eyebrow">ADMIN PANEL</span>
+                  <span className="admin-sidebar__eyebrow">{t('admin.panel')}</span>
                 </div>
               )}
             </div>
@@ -109,9 +125,9 @@ export const AdminLayout = () => {
               </div>
             )}
           </div>
-          <button className={classNames('btn admin-sidebar__logout mt-3', isSidebarCollapsed ? 'w-100 px-2' : 'w-100')} onClick={logout} title={isSidebarCollapsed ? 'Logout' : undefined}>
+          <button className={classNames('btn admin-sidebar__logout mt-3', isSidebarCollapsed ? 'w-100 px-2' : 'w-100')} onClick={handleLogout} title={isSidebarCollapsed ? t('common.logout') : undefined}>
             <i className={classNames('fas fa-sign-out-alt', !isSidebarCollapsed && 'me-2')} />
-            {!isSidebarCollapsed && 'Logout'}
+            {!isSidebarCollapsed && t('common.logout')}
           </button>
         </div>
       </motion.aside>
@@ -140,7 +156,7 @@ export const AdminLayout = () => {
                       <h2 className="h5 mb-0 text-white" style={{ letterSpacing: '-0.5px' }}>
                         Markety
                       </h2>
-                      <span className="admin-sidebar__eyebrow">ADMIN PANEL</span>
+                      <span className="admin-sidebar__eyebrow">{t('admin.panel')}</span>
                     </div>
                   </div>
                 </NavLink>
@@ -163,9 +179,9 @@ export const AdminLayout = () => {
                     <small className="text-white-50">{user?.email}</small>
                   </div>
                 </div>
-                <button className="btn admin-sidebar__logout w-100 mt-3" onClick={logout}>
+                <button className="btn admin-sidebar__logout w-100 mt-3" onClick={handleLogout}>
                   <i className="fas fa-sign-out-alt me-2" />
-                  Logout
+                  {t('common.logout')}
                 </button>
               </div>
             </motion.aside>
@@ -202,8 +218,8 @@ export const AdminLayout = () => {
               <i className="fas fa-bars" />
             </button>
             <div>
-              <h1 className="h5 mb-0 fw-bold">Administration Dashboard</h1>
-              <small className="text-muted">Manage catalogue, orders, and customers</small>
+              <h1 className="h5 mb-0 fw-bold">{t('admin.title')}</h1>
+              <small className="text-muted">{t('admin.subtitle')}</small>
             </div>
           </div>
           <div className="d-flex align-items-center gap-3">
@@ -211,9 +227,21 @@ export const AdminLayout = () => {
               <i className="fas fa-location-arrow text-primary" />
               <span className="small">{location.pathname}</span>
             </div>
-            <button className="btn btn-outline-primary btn-sm">
+            <button type="button" className="mk-admin-control" onClick={toggleLanguage} aria-label="Toggle language">
+              {language === 'ar' ? t('common.english') : t('common.arabic')}
+            </button>
+            <button
+              type="button"
+              className="mk-admin-control mk-admin-control--icon"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+              title={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+            >
+              <i className={theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon'} />
+            </button>
+            <button className="btn btn-outline-primary btn-sm" onClick={() => navigate('/admin/support')}>
               <i className="fas fa-headset me-2" />
-              Support
+              {t('common.support')}
             </button>
           </div>
         </header>

@@ -6,12 +6,18 @@ import './styles/template-bootstrap.css';
 import './styles/template.css';
 import './styles/chatbot.css';
 import './index.css';
+import './i18n';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from './contexts/AuthContext';
 import { WishlistProvider } from './contexts/WishlistContext';
+import { LanguageProvider } from './contexts/LanguageContext';
+import { ThemeProvider, THEME_STORAGE_KEY, applyTheme } from './contexts/ThemeContext';
 
 const queryClient = new QueryClient();
+
+const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+applyTheme(storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : 'light');
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -21,11 +27,15 @@ root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <WishlistProvider>
-            <App />
-          </WishlistProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <WishlistProvider>
+                <App />
+              </WishlistProvider>
+            </AuthProvider>
+          </LanguageProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

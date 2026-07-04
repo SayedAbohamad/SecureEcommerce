@@ -652,11 +652,32 @@
 
   .mk-register-card {
     padding: 25px 19px;
+    width: 100%;
   }
 
   .mk-register-card__header h2 {
     font-size: 27px;
   }
+}
+
+@media (max-width: 360px) {
+  .mk-register-card {
+    padding-inline: 16px;
+  }
+
+  .mk-register-terms {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+}
+
+[dir="rtl"] .mk-register-laptop__topbar b {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] .mk-register-product {
+  right: auto;
+  left: 6%;
 }
 
 @media (max-width: 440px) {

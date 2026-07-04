@@ -38,17 +38,30 @@ public sealed class ReviewSummaryService : IReviewSummaryService
 
     private readonly ApplicationDbContext _context;
     private readonly IGenerativeAiClient _aiClient;
+    private readonly IAiSafetyService _aiSafety;
     private readonly IMemoryCache _cache;
     private readonly ILogger<ReviewSummaryService> _logger;
 
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public ReviewSummaryService(
         ApplicationDbContext context,
         IGenerativeAiClient aiClient,
         IMemoryCache cache,
         ILogger<ReviewSummaryService> logger)
+        : this(context, aiClient, new AiSafetyService(), cache, logger)
+    {
+    }
+
+    public ReviewSummaryService(
+        ApplicationDbContext context,
+        IGenerativeAiClient aiClient,
+        IAiSafetyService aiSafety,
+        IMemoryCache cache,
+        ILogger<ReviewSummaryService> logger)
     {
         _context = context;
         _aiClient = aiClient;
+        _aiSafety = aiSafety;
         _cache = cache;
         _logger = logger;
     }
@@ -132,9 +145,16 @@ public sealed class ReviewSummaryService : IReviewSummaryService
     {
         var reviewList = reviews.ToList();
         var input = "Customer reviews (rating 1-5, then text):\n" + string.Join('\n',
-            reviewList.Select(r => $"- rating={r.Rating}; text=\"{Clean(r.Comment)}\""));
+            reviewList.Select(r => $"- rating={r.Rating}; text=\"{_aiSafety.SanitizeInput(r.Comment, 500)}\""));
 
-        var aiResult = await _aiClient.GenerateJsonAsync(SystemInstructions, input, cancellationToken, temperature: 0.3);
+        var assessment = _aiSafety.Assess(string.Join(' ', reviewList.Select(r => r.Comment)));
+        var aiResult = assessment.ShouldBlockProviderCall
+            ? null
+            : await _aiClient.GenerateJsonAsync(
+                SystemInstructions + _aiSafety.GetSystemSafetyAddendum(),
+                input,
+                cancellationToken,
+                temperature: 0.3);
         if (aiResult != null)
         {
             var parsed = TryParse(aiResult.RawJson);

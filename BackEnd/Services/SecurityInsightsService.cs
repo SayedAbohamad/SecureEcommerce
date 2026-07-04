@@ -27,15 +27,27 @@ public sealed class SecurityInsightsService : ISecurityInsightsService
 
     private readonly ApplicationDbContext _context;
     private readonly IGenerativeAiClient _aiClient;
+    private readonly IAiSafetyService _aiSafety;
     private readonly ILogger<SecurityInsightsService> _logger;
 
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public SecurityInsightsService(
         ApplicationDbContext context,
         IGenerativeAiClient aiClient,
         ILogger<SecurityInsightsService> logger)
+        : this(context, aiClient, new AiSafetyService(), logger)
+    {
+    }
+
+    public SecurityInsightsService(
+        ApplicationDbContext context,
+        IGenerativeAiClient aiClient,
+        IAiSafetyService aiSafety,
+        ILogger<SecurityInsightsService> logger)
     {
         _context = context;
         _aiClient = aiClient;
+        _aiSafety = aiSafety;
         _logger = logger;
     }
 
@@ -49,7 +61,11 @@ public sealed class SecurityInsightsService : ISecurityInsightsService
         GenerativeAiResult? aiResult = null;
         try
         {
-            aiResult = await _aiClient.GenerateJsonAsync(SystemInstructions, input, cancellationToken, temperature: 0.2);
+            aiResult = await _aiClient.GenerateJsonAsync(
+                SystemInstructions + _aiSafety.GetSystemSafetyAddendum(),
+                _aiSafety.SanitizeInput(input, 6000),
+                cancellationToken,
+                temperature: 0.2);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -60,6 +76,8 @@ public sealed class SecurityInsightsService : ISecurityInsightsService
             var parsed = TryParse(aiResult.RawJson);
             if (parsed != null)
             {
+                parsed.Summary = _aiSafety.SanitizeOutput(parsed.Summary, 800);
+                parsed.RecommendedAction = _aiSafety.SanitizeOutput(parsed.RecommendedAction, 400);
                 parsed.Provider = aiResult.Provider;
                 parsed.Signals = signals;
                 return parsed;

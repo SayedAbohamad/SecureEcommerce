@@ -301,7 +301,7 @@ export const ChatbotWidget = () => {
                   <button
                     type="button"
                     key={item.label}
-                    onClick={() => inputRef.current?.focus()}
+                    onClick={() => void sendMessage(undefined, item.prompt)}
                     disabled={sending}
                   >
                     <i className={`fas ${item.icon}`} />
@@ -360,12 +360,31 @@ export const ChatbotWidget = () => {
                                   <button
                                     type="button"
                                     className="primary"
-                                    onClick={() =>
-                                      void sendMessage(
-                                        undefined,
-                                        `Add ${product.name} to my cart`,
-                                      )
-                                    }
+                                    onClick={() => {
+                                      if (product.sizes.length > 0) {
+                                        addSystemMessage(
+                                          `${product.name} has size/options. Open the product page and choose the option you want before adding it to cart.`,
+                                        );
+                                        return;
+                                      }
+
+                                      void executeAction(
+                                        `product-add-${product.id}`,
+                                        {
+                                          type: 'add_to_cart',
+                                          productId: product.id,
+                                          quantity: 1,
+                                          size: null,
+                                          label: `Add ${product.name} to cart`,
+                                          requiresConfirmation: true,
+                                        },
+                                        {
+                                          ...message.response!,
+                                          products: [product],
+                                        },
+                                      );
+                                    }}
+                                    disabled={Boolean(executingAction)}
                                   >
                                     <i className="fas fa-cart-plus" /> Add
                                   </button>

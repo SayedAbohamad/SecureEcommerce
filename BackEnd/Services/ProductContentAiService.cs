@@ -36,11 +36,22 @@ public sealed class ProductContentAiService : IProductContentAiService
         """;
 
     private readonly IGenerativeAiClient _aiClient;
+    private readonly IAiSafetyService _aiSafety;
     private readonly ILogger<ProductContentAiService> _logger;
 
     public ProductContentAiService(IGenerativeAiClient aiClient, ILogger<ProductContentAiService> logger)
+        : this(aiClient, new AiSafetyService(), logger)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ProductContentAiService(
+        IGenerativeAiClient aiClient,
+        IAiSafetyService aiSafety,
+        ILogger<ProductContentAiService> logger)
     {
         _aiClient = aiClient;
+        _aiSafety = aiSafety;
         _logger = logger;
     }
 
@@ -49,19 +60,29 @@ public sealed class ProductContentAiService : IProductContentAiService
         CancellationToken cancellationToken)
     {
         var input = $"""
-            Product name: {Clean(request.Name, 200)}
-            Category: {Clean(request.CategoryName, 100)}
+            Product name: {_aiSafety.SanitizeInput(request.Name, 200)}
+            Category: {_aiSafety.SanitizeInput(request.CategoryName, 100)}
             Price: {request.Price?.ToString(CultureInfo.InvariantCulture) ?? "unspecified"}
-            Specs/features supplied by admin: {Clean(request.Specs, 1000)}
-            Existing description to improve (may be empty): {Clean(request.ExistingDescription, 3000)}
+            Specs/features supplied by admin: {_aiSafety.SanitizeInput(request.Specs, 1000)}
+            Existing description to improve (may be empty): {_aiSafety.SanitizeInput(request.ExistingDescription, 3000)}
             """;
 
-        var aiResult = await _aiClient.GenerateJsonAsync(SystemInstructions, input, cancellationToken, temperature: 0.5);
+        var assessment = _aiSafety.Assess($"{request.Name} {request.Specs} {request.ExistingDescription}");
+        var aiResult = assessment.ShouldBlockProviderCall
+            ? null
+            : await _aiClient.GenerateJsonAsync(
+                SystemInstructions + _aiSafety.GetSystemSafetyAddendum(),
+                input,
+                cancellationToken,
+                temperature: 0.5);
         if (aiResult != null)
         {
             var parsed = TryParse(aiResult.RawJson);
             if (parsed != null)
             {
+                parsed.Description = _aiSafety.SanitizeOutput(parsed.Description, 1500);
+                parsed.ShortSeoDescription = _aiSafety.SanitizeOutput(parsed.ShortSeoDescription, 160);
+                parsed.Highlights = parsed.Highlights.Select(h => _aiSafety.SanitizeOutput(h, 120)).ToList();
                 parsed.Provider = aiResult.Provider;
                 return parsed;
             }

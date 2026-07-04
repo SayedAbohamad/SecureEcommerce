@@ -1,0 +1,107 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: markety-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD:-Markety_Docker_Dev_123!}
+    ports:
+      - "${SQLSERVER_HOST_PORT:-14333}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: >
+        /bin/bash -c '(/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "SELECT 1" ||
+        /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1")'
+      interval: 15s
+      timeout: 20s
+      retries: 30
+      start_period: 90s
+
+  backend:
+    build:
+      context: .
+      dockerfile: BackEnd/Dockerfile
+    container_name: markety-backend
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      HttpsRedirection__Enabled: "false"
+      CatalogSeed__Enabled: ${CATALOG_SEED_ENABLED:-true}
+      AdminSeed__Enabled: ${ADMIN_SEED_ENABLED:-true}
+      AdminSeed__Email: ${ADMIN_SEED_EMAIL:-admin@gmail.com}
+      AdminSeed__Password: ${ADMIN_SEED_PASSWORD:-Admin@123456}
+      AdminSeed__FullName: ${ADMIN_SEED_FULL_NAME:-Markety Admin}
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${SQLSERVER_DATABASE:-JewelleryEcommerce};User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-Markety_Docker_Dev_123!};TrustServerCertificate=True;MultipleActiveResultSets=True;"
+      AllowedOrigins__0: http://localhost:${FRONTEND_HOST_PORT:-8080}
+      Jwt__Key: ${JWT_KEY:-MarketyDockerDevelopmentJwtKeyChangeMe1234567890}
+      Jwt__Issuer: ${JWT_ISSUER:-Ecommercev1}
+      Jwt__Audience: ${JWT_AUDIENCE:-EcommerceUsers}
+      EmailSettings__EmailHost: ${EMAIL_HOST:-smtp.gmail.com}
+      EmailSettings__EmailPort: ${EMAIL_PORT:-587}
+      EmailSettings__EmailUsername: ${EMAIL_USERNAME:-}
+      EmailSettings__EmailPassword: ${EMAIL_PASSWORD:-}
+      EmailSettings__FromName: ${EMAIL_FROM_NAME:-Markety}
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:-}
+      Stripe__FrontendBaseUrl: http://localhost:${FRONTEND_HOST_PORT:-8080}
+      Recaptcha__SiteKey: ${RECAPTCHA_SITE_KEY:-}
+      Recaptcha__SecretKey: ${RECAPTCHA_SECRET_KEY:-}
+      GoogleAuth__ClientId: ${GoogleAuth__ClientId:-}
+      AiAssistant__Enabled: ${AI_ASSISTANT_ENABLED:-true}
+      AiAssistant__Provider: ${AI_ASSISTANT_PROVIDER:-Gemini}
+      AiAssistant__ApiKey: ${AI_ASSISTANT_API_KEY:-}
+      AiAssistant__Model: ${AI_ASSISTANT_MODEL:-gemini-flash-lite-latest}
+      AiAssistant__Endpoint: ${AI_ASSISTANT_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent}
+      AiAssistant__TimeoutSeconds: ${AI_ASSISTANT_TIMEOUT_SECONDS:-30}
+    ports:
+      - "${BACKEND_HOST_PORT:-5000}:8080"
+    volumes:
+      - backend-product-images:/app/wwwroot/images/products
+      - backend-logs:/app/logs
+      - backend-data-protection:/root/.aspnet/DataProtection-Keys
+
+  db-migrate:
+    profiles:
+      - migrate
+    build:
+      context: .
+      dockerfile: BackEnd/Dockerfile
+      target: migrate
+    container_name: markety-db-migrate
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${SQLSERVER_DATABASE:-JewelleryEcommerce};User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-Markety_Docker_Dev_123!};TrustServerCertificate=True;MultipleActiveResultSets=True;"
+      Jwt__Key: ${JWT_KEY:-MarketyDockerDevelopmentJwtKeyChangeMe1234567890}
+      Jwt__Issuer: ${JWT_ISSUER:-Ecommercev1}
+      Jwt__Audience: ${JWT_AUDIENCE:-EcommerceUsers}
+      EmailSettings__EmailHost: ${EMAIL_HOST:-smtp.gmail.com}
+      EmailSettings__EmailPort: ${EMAIL_PORT:-587}
+      EmailSettings__EmailUsername: ${EMAIL_USERNAME:-}
+      EmailSettings__EmailPassword: ${EMAIL_PASSWORD:-}
+      EmailSettings__FromName: ${EMAIL_FROM_NAME:-Markety}
+
+  frontend:
+    build:
+      context: ./markety-frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_BASE_URL: /api
+        REACT_APP_RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY:-}
+    container_name: markety-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+
+volumes:
+  sqlserver-data:
+  backend-product-images:
+  backend-logs:
+  backend-data-protection:
